@@ -21,9 +21,22 @@ type topic struct {
 	Message    string    `json:"message"`
 }
 
+/*var configDefaults = topic{
+	Name: "Default Topic",
+	Triggers: []string{},
+	Sine: time.Now(),
+	LastUser: "238741157960482816",
+	LastSet: time.Now(),
+	BreakUser: "238741157960482816",
+	BreakTime: time.Now(),
+	StreakUser: "238741157960482816",
+	StreakSet: time.Now(),
+	Message: "Default Message",
+}*/
+
 var config struct {
 	Guild map[string]struct {
-		Topic []topic `json:"topic"`
+		Topics map[string]topic `json:"topic"`
 	} `json:"guild"`
 }
 
@@ -35,14 +48,14 @@ func init() {
 		Help: `bpconfig is the modificaation tool for the bad post timer. It is used to define
 topics and triggers (as regular expressions). If you have retained vestages of
 your sanity and don't want to learn regex, then TL;DR to match "word" not within 
-other words, use //\b(word)\b//.
+other words, use \b(word)\b
 If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (minus \C)
 # Arguments
-**-new <topic name>** : Create a new topic with the topic name <topic name>
-**-rm <topic name>**  : Remove the <topic name>. Dangerous!
+**--new <topic name>** : Create a new topic with the topic name <topic name>
+**--del <topic name>** : Delete <topic name>. Dangerous!
 **-ls** : List all topics
-**<topic name> <--addtrigger|-a> <//regex//>** : Add a trigger to <topic name> fulfilling //regex// (must be in //double slashes//)
-**<topic name> <--rmtrigger|-rm> <item number>** : remove the <item number> trigger from <topic name>
+**<topic name> <--addtrigger|-a> <regex>** : Add a trigger to <topic name> fulfilling <regex> (one regex per --add is supported)
+**<topic name> <--rmtrigger|-rm> <item number>** : Remove the <item number> trigger from <topic name>
 **<topic name> <-ls>** : List all topic triggers
 # Usage:
 ` + f.Config.Prefix + `bpconfig -new foo
@@ -53,9 +66,10 @@ If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (
 	}
 
 	dat.Load("incident-counter/config.json", &config)
+
 	if config.Guild == nil {
 		config.Guild = make(map[string]struct {
-			Topic []topic `json:"topic"`
+			Topics map[string]topic `json:"topic"`
 		})
 	}
 
@@ -63,7 +77,7 @@ If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (
 }
 
 func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
-	if message.Author.Bot {
+	if m.Message.Author.Bot {
 		return
 	}
 	var guildID string
@@ -73,9 +87,11 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 	} else {
 		guildID = channel.GuildID
 	}
+	if config.Guild[guildID].Topics == nil {
+		config.Guild[guildID].Topics = make(map[string]topic)
+	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
 	localTopics := config.Guild[guildID].Topics
-	defer config.Guild[guildID].Topics = localTopics
 	defer dat.Save("incident-counter/config.json")
 	for li := range localTopics {
 		for i := range localTopics[li].Triggers {
@@ -90,6 +106,7 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 			}
 		}
 	}
+	config.Guild[guildID].Topics = localTopics
 }
 
 func bpconfig(session *dsg.Session, message *dsg.Message) {
@@ -100,9 +117,11 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 	} else {
 		guildID = channel.GuildID
 	}
+	if config.Guild[guildID].Topics == nil {
+		config.Guild[guildID].Topics = make(map[string]topic)
+	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
 	localTopics := config.Guild[guildID].Topics
-	defer config.Guild[guildID].Topics = localTopics
 	defer dat.Save("incident-counter/config.json")
 
 	flgs := flags.Parse(message.Content)
@@ -110,16 +129,60 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 	for i := range flgs {
 		if flgs[i].Name == "--unflagged" {
 			topicname = flgs[i].Value
+		} else if flgs[i].Name == "--new" {
+			localTopics[flgs[i].Value] = topic{}
+			localTopics[flgs[i].Value].Name = flgs[i].Value
+			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created topic %v.", flgs[i].Value))
+		} else if flgs[i].Name == "--del" {
+			delete(localTopics, flgs[i].Value)
+			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Deleted topic %v.", flgs[i].Value))
+		}
+		if topicname != "" {
+			switch flgs[i].Name {
+			case "--add", "-a":
+				_, err := regexp.MatchString(flgs[i].Value, "Some String")
+				if err != nil {
+					session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Hey nerd, **%v** doesn't make any sense. Try again idiot. `(error: %v)`", flgs[i].Value, err))
+					continue
+				}
+				localTopics[topicname].Triggers = append(localTopics[topicname].Triggers, flgs[i].Value)
+				session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created uh..... trigger %v.", flgs[i].Value))
+			case "--remove", "-rm":
+				index, err := strconv.Atoi(flgs[i].Value)
+				if err != nil {
+					dat.Log.Println(err)
+					dat.AlertDiscord(session, message, err)
+				}
+				go deleteFromSlice(&topicname.Triggers, index, false)
+				session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Trigger #%v committed not in memory.", flgs[i].Value))
+			case "--list", "-ls", "-l":
+				str := fmt.Sprintf("List of triggers for %v:", topicname)
+				for i := range localTopics[topicname].Triggers {
+					str += fmt.Sprintf("\n`%v`**:**`%v`**.**", i, localTopics[topicname].Triggers)
+				}
+				session.ChannelMessageSend(message.ChannelID, str)
+			}
 		}
 	}
+	config.Guild[guildID].Topics = localTopics
 }
 
-const japeFlavourText = []string{
+var japeFlavourText = []string{
 	"You went too far, you fool.",
 	"Awe heck, I can't believe you've done this.",
 	"OP is a coward.",
 	"Think before you speak.",
 	"You made a stupid post so now you get no rights.",
+	"Do you value your toes?",
+}
+
+func deleteFromSlice(a *[]interface{}, i int, preserveOrder bool) {
+	if preserveOrder {
+		a = append(a[:i], a[i+1:]...)
+	} else {
+		a[i] = a[len(a)-1]
+		a = a[:len(a)-1]
+	}
 }
 
 // If matchedTopic is called, it is already assumed the regex has been met.
