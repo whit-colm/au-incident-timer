@@ -1,0 +1,9 @@
+#!/bin/bash
+
+# build should compile whatever is in the src as a plugin and save it as a 
+# single .so in the bin.
+# It should use env to aleviate errors of bot runners not having the correct
+# go environment
+
+env CGO_ENABLED=0 GO111MODULE=on go build -v -o ./bin/exampleplugin.so ./src/main.go
+if [ "$?" -ne "0" ] ; then exit 1 ; else echo "Compiled plugin to bin. Move \"`ls bin`\" into a bots plugin dir to use." ; fi
