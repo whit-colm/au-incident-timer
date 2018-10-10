@@ -1,10 +1,14 @@
 package main
 
 import (
+	"fmt"
 	"github.com/aurumbot/flags"
 	"github.com/aurumbot/lib/dat"
 	f "github.com/aurumbot/lib/foundation"
 	dsg "github.com/bwmarrin/discordgo"
+	"math/rand"
+	"regexp"
+	"strconv"
 	"time"
 )
 
@@ -81,7 +85,7 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 		return
 	}
 	var guildID string
-	if channel, err := session.Channel(m.Message.ChannelID); err != nil {
+	if channel, err := s.Channel(m.Message.ChannelID); err != nil {
 		dat.Log.Println(err)
 		return
 	} else {
@@ -92,7 +96,7 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
 	localTopics := config.Guild[guildID].Topics
-	defer dat.Save("incident-counter/config.json")
+	defer dat.Save("incident-counter/config.json", &config)
 	for li := range localTopics {
 		for i := range localTopics[li].Triggers {
 			match, err := regexp.MatchString(localTopics[li].Triggers[i], m.Message.Content)
@@ -122,7 +126,7 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
 	localTopics := config.Guild[guildID].Topics
-	defer dat.Save("incident-counter/config.json")
+	defer dat.Save("incident-counter/config.json", &config)
 
 	flgs := flags.Parse(message.Content)
 	var topicname string
