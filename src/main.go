@@ -13,30 +13,32 @@ import (
 )
 
 type topic struct {
-	Name       string    `json:"name"`
-	Triggers   []string  `json:"triggers"`
-	Since      time.Time `json:"since"`
-	LastUser   string    `json:"lastuser"`
-	LastSet    time.Time `json:"lastset"`
-	BreakUser  string    `json:"breakuser"`
-	BreakTime  time.Time `json:"breaktime"`
-	StreakUser string    `json:"streakuser"`
-	StreakSet  time.Time `json:"streakset"`
-	Message    string    `json:"message"`
+	Name             string    `json:"n"`
+	Triggers         []string  `json:"t"`
+	CurrentStreakSet time.Time `json:"s"`
+	LastStreakSetter string    `json:"ls-u"`
+	LastStreakSet    time.Time `json:"ls-t"`
+	HighScoreSetter  string    `json:"hs-su"`
+	HighScoreSet     time.Time `json:"hs-st"`
+	HighScoreBreaker string    `json:"hs-bu"`
+	HighScoreBroken  time.Time `json:"hs-bt"`
+	Message          string    `json:"m"`
 }
 
+/*
 var configDefaults = topic{
 	Name:       "Default Topic",
 	Triggers:   []string{},
-	Since:      time.Now(),
-	LastUser:   "238741157960482816",
-	LastSet:    time.Now(),
-	BreakUser:  "238741157960482816",
-	BreakTime:  time.Now(),
-	StreakUser: "238741157960482816",
+	CurrentStreakSince:      time.Now(),
+	LastStreakSetter:   "238741157960482816",
+	LastStreakSet:    time.Now(),
+	LastStreakBreaker:  "238741157960482816",
+	LastStreakBroken:  time.Now(),
+	HighScoreSetter: "238741157960482816",
 	StreakSet:  time.Now(),
 	Message:    "Default Message",
 }
+*/
 
 var config struct {
 	Guild map[string]struct {
@@ -58,12 +60,12 @@ If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (
 **--new <topic name>** : Create a new topic with the topic name <topic name>
 **--del <topic name>** : Delete <topic name>. Dangerous!
 **-ls** : List all topics
-**<topic name> <--addtrigger|-a> <regex>** : Add a trigger to <topic name> fulfilling <regex> (one regex per --add is supported)
-**<topic name> <--rmtrigger|-rm> <item number>** : Remove the <item number> trigger from <topic name>
+**<topic name> <--add|-a> <regex>** : Add a trigger to <topic name> fulfilling <regex> (one regex per --add is supported)
+**<topic name> <--rm|-rm> <item number>** : Remove the <item number> trigger from <topic name>
 **<topic name> <-ls>** : List all topic triggers
 # Usage:
 ` + f.Config.Prefix + `bpconfig -new foo
-` + f.Config.Prefix + `bpconfig foo -a //^[A-z].+$//`,
+` + f.Config.Prefix + `bpconfig foo -a ^[A-z].+$`,
 		Perms:   dsg.PermissionManageWebhooks,
 		Version: "v1.0",
 		Action:  bpconfig,
@@ -105,7 +107,7 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 				return
 			}
 			if match {
-				matchedTopic(guildTopics.Topics[li], s, m.Message)
+				guildTopics.Topics[li] = matchedTopic(guildTopics.Topics[li], s, m.Message)
 				return
 			}
 		}
@@ -188,9 +190,9 @@ var japeFlavourText = []string{
 
 // If matchedTopic is called, it is already assumed the regex has been met.
 // Regex will not be checked.
-func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) {
+func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 	rand.Seed(time.Now().Unix())
-	if time.Since(t.Since) > t.BreakTime.Sub(t.StreakSet) {
+	if time.Since(t.CurrentStreakSet) > t.HighScoreBroken.Sub(t.HighScoreSet) {
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
 			Color:       0x073642,
@@ -203,29 +205,36 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) {
 			},
 			Fields: []*dsg.MessageEmbedField{
 				&dsg.MessageEmbedField{
-					Name: "Previous Streak",
+					Name: "Previous Longest Streak",
 					Value: fmt.Sprintf("Set by <@%v> at %v, and broken by <@%v> at %v (%v) with the messsage\n```%v```",
-						t.StreakUser,
-						t.StreakSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						t.BreakUser,
-						t.BreakTime.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						t.BreakTime.Sub(t.StreakSet),
+						t.HighScoreSetter,
+						t.HighScoreSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						t.HighScoreBreaker,
+						t.HighScoreBroken.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						t.HighScoreBroken.Sub(t.HighScoreSet),
 						t.Message),
 					Inline: true,
 				},
 				&dsg.MessageEmbedField{
-					Name: "Highest Streak",
+					Name: "New Longest Streak",
 					Value: fmt.Sprintf("Set by <@%v> at %v, and broken by %v at %v (%v) with the message\n```%v```",
-						t.LastUser,
-						t.LastSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						t.LastStreakSetter,
+						t.LastStreakSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						m.Author.Mention(),
 						time.Now().Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						time.Since(t.LastSet),
+						time.Since(t.LastStreakSet),
 						m.Content),
 					Inline: true,
 				},
 			},
 		})
+		t.HighScoreSetter = t.LastStreakSetter
+		t.HighScoreSet = t.LastStreakSet
+		t.LastStreakSetter = m.Author.ID
+		t.HighScoreBreaker = m.Author.ID
+		t.LastStreakSet = time.Now()
+		t.HighScoreBroken = time.Now()
+		t.Message = m.Content
 	} else {
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
@@ -241,26 +250,29 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) {
 				&dsg.MessageEmbedField{
 					Name: "Highest Streak",
 					Value: fmt.Sprintf("Set by <@%v> at %v, and broken by <@%v> at %v (%v) with the messsage\n```%v```",
-						t.StreakUser,
-						t.StreakSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						t.BreakUser,
-						t.BreakTime.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						t.BreakTime.Sub(t.StreakSet),
+						t.HighScoreSetter,
+						t.HighScoreSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						t.HighScoreBreaker,
+						t.HighScoreBroken.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						t.HighScoreBroken.Sub(t.HighScoreSet),
 						t.Message),
 					Inline: true,
 				},
 				&dsg.MessageEmbedField{
 					Name: "Current Streak",
 					Value: fmt.Sprintf("Set by <@%v> at %v, and broken by %v at %v (%v) with the message\n```%v```",
-						t.LastUser,
-						t.LastSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						t.LastStreakSetter,
+						t.LastStreakSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						m.Author.Mention(),
 						time.Now().Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						time.Since(t.LastSet),
+						time.Since(t.LastStreakSet),
 						m.Content),
 					Inline: true,
 				},
 			},
 		})
+		t.LastStreakSetter = m.Author.ID
+		t.LastStreakSet = time.Now()
 	}
+	return t
 }

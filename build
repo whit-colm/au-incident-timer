@@ -5,5 +5,5 @@
 # It should use env to aleviate errors of bot runners not having the correct
 # go environment
 
-env CGO_ENABLED=1 GO111MODULE=on go build -v -o ./bin/incident-timer.so ./src/main.go
+env CGO_ENABLED=1 GO111MODULE=on go build -buildmode=plugin -v -o ./bin/incident-counter.so ./src/main.go
 if [ "$?" -ne "0" ] ; then exit 1 ; else echo "Compiled plugin to bin. Move \"`ls bin`\" into a bots plugin dir to use." ; fi
