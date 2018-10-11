@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -25,20 +26,18 @@ type topic struct {
 	Message          string    `json:"m"`
 }
 
-/*
 var configDefaults = topic{
-	Name:       "Default Topic",
-	Triggers:   []string{},
-	CurrentStreakSince:      time.Now(),
-	LastStreakSetter:   "238741157960482816",
+	Name:             "Default Name",
+	Triggers:         []string{},
+	CurrentStreakSet: time.Now(),
+	LastStreakSetter: "238741157960482816",
 	LastStreakSet:    time.Now(),
-	LastStreakBreaker:  "238741157960482816",
-	LastStreakBroken:  time.Now(),
-	HighScoreSetter: "238741157960482816",
-	StreakSet:  time.Now(),
-	Message:    "Default Message",
+	HighScoreSetter:  "238741157960482816",
+	HighScoreSet:     time.Now(),
+	HighScoreBreaker: "238741157960482816",
+	HighScoreBroken:  time.Now(),
+	Message:          "This is the default message",
 }
-*/
 
 var config struct {
 	Guild map[string]struct {
@@ -60,7 +59,7 @@ If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (
 **--new <topic name>** : Create a new topic with the topic name <topic name>
 **--del <topic name>** : Delete <topic name>. Dangerous!
 **-ls** : List all topics
-**<topic name> <--add|-a> <regex>** : Add a trigger to <topic name> fulfilling <regex> (one regex per --add is supported)
+**<topic name> <--add|-a> <regex>** : Add a trigger to <topic name> fulfilling <regex> (one regex per --add is supported). Case insensitive.
 **<topic name> <--rm|-rm> <item number>** : Remove the <item number> trigger from <topic name>
 **<topic name> <-ls>** : List all topic triggers
 # Usage:
@@ -86,6 +85,10 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 	if m.Message.Author.Bot {
 		return
 	}
+	if strings.HasPrefix(m.Message.Content, f.Config.Prefix) {
+		return
+	}
+	m.Message.Content = strings.ToLower(m.Message.Content)
 	var guildID string
 	if channel, err := s.Channel(m.Message.ChannelID); err != nil {
 		dat.Log.Println(err)
@@ -136,7 +139,7 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 		if flgs[i].Name == "--unflagged" {
 			topicname = flgs[i].Value
 		} else if flgs[i].Name == "--new" {
-			newTopic := topic{}
+			newTopic := configDefaults
 			newTopic.Name = flgs[i].Value
 			guildTopics.Topics[flgs[i].Value] = newTopic
 			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created topic %v.", flgs[i].Value))
@@ -186,13 +189,15 @@ var japeFlavourText = []string{
 	"Think before you speak.",
 	"You made a stupid post so now you get no rights.",
 	"Do you value your toes?",
+	"Arrested for stupid on main.",
 }
 
 // If matchedTopic is called, it is already assumed the regex has been met.
 // Regex will not be checked.
 func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 	rand.Seed(time.Now().Unix())
-	if time.Since(t.CurrentStreakSet) > t.HighScoreBroken.Sub(t.HighScoreSet) {
+	if time.Since(t.CurrentStreakSet).Nanoseconds() < t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds() {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v > %v is %v", time.Since(t.CurrentStreakSet).Nanoseconds(), t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds(), time.Since(t.CurrentStreakSet).Nanoseconds() > t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds()))
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
 			Color:       0x073642,
