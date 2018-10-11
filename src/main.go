@@ -29,13 +29,13 @@ type topic struct {
 var configDefaults = topic{
 	Name:             "Default Name",
 	Triggers:         []string{},
-	CurrentStreakSet: time.Now(),
-	LastStreakSetter: "238741157960482816",
-	LastStreakSet:    time.Now(),
-	HighScoreSetter:  "238741157960482816",
-	HighScoreSet:     time.Now(),
-	HighScoreBreaker: "238741157960482816",
-	HighScoreBroken:  time.Now(),
+	CurrentStreakSet: time.Date(2018, time.October, 11, 1, 0, 0, 0, time.UTC),
+	LastStreakSetter: "478626533636833282",
+	LastStreakSet:    time.Date(2018, time.October, 10, 23, 0, 0, 0, time.UTC),
+	HighScoreSetter:  "478626533636833282",
+	HighScoreSet:     time.Date(2018, time.October, 8, 15, 0, 0, 0, time.UTC),
+	HighScoreBreaker: "478626533636833282",
+	HighScoreBroken:  time.Date(2018, time.October, 9, 3, 0, 0, 0, time.UTC),
 	Message:          "This is the default message",
 }
 
@@ -196,7 +196,7 @@ var japeFlavourText = []string{
 // Regex will not be checked.
 func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 	rand.Seed(time.Now().Unix())
-	if time.Since(t.CurrentStreakSet).Nanoseconds() < t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds() {
+	if time.Since(t.CurrentStreakSet) > t.HighScoreBroken.Sub(t.HighScoreSet) {
 		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v > %v is %v", time.Since(t.CurrentStreakSet).Nanoseconds(), t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds(), time.Since(t.CurrentStreakSet).Nanoseconds() > t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds()))
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
