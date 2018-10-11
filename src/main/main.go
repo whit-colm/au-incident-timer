@@ -25,18 +25,18 @@ type topic struct {
 	Message    string    `json:"message"`
 }
 
-/*var configDefaults = topic{
-	Name: "Default Topic",
-	Triggers: []string{},
-	Sine: time.Now(),
-	LastUser: "238741157960482816",
-	LastSet: time.Now(),
-	BreakUser: "238741157960482816",
-	BreakTime: time.Now(),
+var configDefaults = topic{
+	Name:       "Default Topic",
+	Triggers:   []string{},
+	Since:      time.Now(),
+	LastUser:   "238741157960482816",
+	LastSet:    time.Now(),
+	BreakUser:  "238741157960482816",
+	BreakTime:  time.Now(),
 	StreakUser: "238741157960482816",
-	StreakSet: time.Now(),
-	Message: "Default Message",
-}*/
+	StreakSet:  time.Now(),
+	Message:    "Default Message",
+}
 
 var config struct {
 	Guild map[string]struct {
@@ -91,26 +91,26 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 	} else {
 		guildID = channel.GuildID
 	}
-	if config.Guild[guildID].Topics == nil {
-		config.Guild[guildID].Topics = make(map[string]topic)
-	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
-	localTopics := config.Guild[guildID].Topics
+	guildTopics := config.Guild[guildID]
+	if guildTopics.Topics == nil {
+		guildTopics.Topics = make(map[string]topic)
+	}
 	defer dat.Save("incident-counter/config.json", &config)
-	for li := range localTopics {
-		for i := range localTopics[li].Triggers {
-			match, err := regexp.MatchString(localTopics[li].Triggers[i], m.Message.Content)
+	for li := range guildTopics.Topics {
+		for i := range guildTopics.Topics[li].Triggers {
+			match, err := regexp.MatchString(guildTopics.Topics[li].Triggers[i], m.Message.Content)
 			if err != nil {
 				dat.Log.Println(err)
 				return
 			}
 			if match {
-				matchedTopic(localTopics[li], s, m.Message)
+				matchedTopic(guildTopics.Topics[li], s, m.Message)
 				return
 			}
 		}
 	}
-	config.Guild[guildID].Topics = localTopics
+	config.Guild[guildID] = guildTopics
 }
 
 func bpconfig(session *dsg.Session, message *dsg.Message) {
@@ -121,11 +121,11 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 	} else {
 		guildID = channel.GuildID
 	}
-	if config.Guild[guildID].Topics == nil {
-		config.Guild[guildID].Topics = make(map[string]topic)
-	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
-	localTopics := config.Guild[guildID].Topics
+	guildTopics := config.Guild[guildID]
+	if guildTopics.Topics == nil {
+		guildTopics.Topics = make(map[string]topic)
+	}
 	defer dat.Save("incident-counter/config.json", &config)
 
 	flgs := flags.Parse(message.Content)
@@ -134,11 +134,12 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 		if flgs[i].Name == "--unflagged" {
 			topicname = flgs[i].Value
 		} else if flgs[i].Name == "--new" {
-			localTopics[flgs[i].Value] = topic{}
-			localTopics[flgs[i].Value].Name = flgs[i].Value
+			newTopic := topic{}
+			newTopic.Name = flgs[i].Value
+			guildTopics.Topics[flgs[i].Value] = newTopic
 			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created topic %v.", flgs[i].Value))
 		} else if flgs[i].Name == "--del" {
-			delete(localTopics, flgs[i].Value)
+			delete(guildTopics.Topics, flgs[i].Value)
 			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Deleted topic %v.", flgs[i].Value))
 		}
 		if topicname != "" {
@@ -149,7 +150,9 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 					session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Hey nerd, **%v** doesn't make any sense. Try again idiot. `(error: %v)`", flgs[i].Value, err))
 					continue
 				}
-				localTopics[topicname].Triggers = append(localTopics[topicname].Triggers, flgs[i].Value)
+				tmpTopic := guildTopics.Topics[topicname]
+				tmpTopic.Triggers = append(tmpTopic.Triggers, flgs[i].Value)
+				guildTopics.Topics[topicname] = tmpTopic
 				session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created uh..... trigger %v.", flgs[i].Value))
 			case "--remove", "-rm":
 				index, err := strconv.Atoi(flgs[i].Value)
@@ -157,18 +160,21 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 					dat.Log.Println(err)
 					dat.AlertDiscord(session, message, err)
 				}
-				go deleteFromSlice(&topicname.Triggers, index, false)
+				tmpTopic := guildTopics.Topics[topicname]
+				tmpTopic.Triggers[index] = tmpTopic.Triggers[len(tmpTopic.Triggers)-1]
+				tmpTopic.Triggers = tmpTopic.Triggers[:len(tmpTopic.Triggers)-1]
+				guildTopics.Topics[topicname] = tmpTopic
 				session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Trigger #%v committed not in memory.", flgs[i].Value))
 			case "--list", "-ls", "-l":
 				str := fmt.Sprintf("List of triggers for %v:", topicname)
-				for i := range localTopics[topicname].Triggers {
-					str += fmt.Sprintf("\n`%v`**:**`%v`**.**", i, localTopics[topicname].Triggers)
+				for i := range guildTopics.Topics[topicname].Triggers {
+					str += fmt.Sprintf("\n`%v`**:**`%v`**.**", i, guildTopics.Topics[topicname].Triggers)
 				}
 				session.ChannelMessageSend(message.ChannelID, str)
 			}
 		}
 	}
-	config.Guild[guildID].Topics = localTopics
+	config.Guild[guildID] = guildTopics
 }
 
 var japeFlavourText = []string{
@@ -180,20 +186,11 @@ var japeFlavourText = []string{
 	"Do you value your toes?",
 }
 
-func deleteFromSlice(a *[]interface{}, i int, preserveOrder bool) {
-	if preserveOrder {
-		a = append(a[:i], a[i+1:]...)
-	} else {
-		a[i] = a[len(a)-1]
-		a = a[:len(a)-1]
-	}
-}
-
 // If matchedTopic is called, it is already assumed the regex has been met.
 // Regex will not be checked.
 func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) {
 	rand.Seed(time.Now().Unix())
-	if time.Since(t.Since) > t.Streak {
+	if time.Since(t.Since) > t.BreakTime.Sub(t.StreakSet) {
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
 			Color:       0x073642,
@@ -224,7 +221,7 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) {
 						m.Author.Mention(),
 						time.Now().Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						time.Since(t.LastSet),
-						m.Message.Content),
+						m.Content),
 					Inline: true,
 				},
 			},
@@ -260,7 +257,7 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) {
 						m.Author.Mention(),
 						time.Now().Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						time.Since(t.LastSet),
-						m.Message.Content),
+						m.Content),
 					Inline: true,
 				},
 			},
