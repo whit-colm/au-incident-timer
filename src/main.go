@@ -26,19 +26,6 @@ type topic struct {
 	Message          string    `json:"m"`
 }
 
-var configDefaults = topic{
-	Name:             "Default Name",
-	Triggers:         []string{},
-	CurrentStreakSet: time.Date(2018, time.October, 11, 1, 0, 0, 0, time.UTC),
-	LastStreakSetter: "478626533636833282",
-	LastStreakSet:    time.Date(2018, time.October, 10, 23, 0, 0, 0, time.UTC),
-	HighScoreSetter:  "478626533636833282",
-	HighScoreSet:     time.Date(2018, time.October, 8, 15, 0, 0, 0, time.UTC),
-	HighScoreBreaker: "478626533636833282",
-	HighScoreBroken:  time.Date(2018, time.October, 9, 3, 0, 0, 0, time.UTC),
-	Message:          "This is the default message",
-}
-
 var config struct {
 	Guild map[string]struct {
 		Topics map[string]topic `json:"topic"`
@@ -66,7 +53,7 @@ If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (
 ` + f.Config.Prefix + `bpconfig -new foo
 ` + f.Config.Prefix + `bpconfig foo -a ^[A-z].+$`,
 		Perms:   dsg.PermissionManageWebhooks,
-		Version: "v1.0",
+		Version: "v1.0.2",
 		Action:  bpconfig,
 	}
 
@@ -139,7 +126,18 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 		if flgs[i].Name == "--unflagged" {
 			topicname = flgs[i].Value
 		} else if flgs[i].Name == "--new" {
-			newTopic := configDefaults
+			newTopic := topic{
+				Name:             flgs[i].Name,
+				Triggers:         []string{},
+				CurrentStreakSet: time.Now(),
+				LastStreakSetter: "478626533636833282",
+				LastStreakSet:    time.Now(),
+				HighScoreSetter:  "478626533636833282",
+				HighScoreSet:     time.Now(),
+				HighScoreBreaker: "478626533636833282",
+				HighScoreBroken:  time.Now(),
+				Message:          "This is the Default Message!",
+			}
 			newTopic.Name = flgs[i].Value
 			guildTopics.Topics[flgs[i].Value] = newTopic
 			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created topic %v.", flgs[i].Value))
@@ -158,7 +156,7 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 				tmpTopic := guildTopics.Topics[topicname]
 				tmpTopic.Triggers = append(tmpTopic.Triggers, flgs[i].Value)
 				guildTopics.Topics[topicname] = tmpTopic
-				session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created uh..... trigger %v.", flgs[i].Value))
+				session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Created uh..... trigger `%v`.", flgs[i].Value))
 			case "--remove", "-rm":
 				index, err := strconv.Atoi(flgs[i].Value)
 				if err != nil {
@@ -173,7 +171,7 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 			case "--list", "-ls", "-l":
 				str := fmt.Sprintf("List of triggers for %v:", topicname)
 				for i := range guildTopics.Topics[topicname].Triggers {
-					str += fmt.Sprintf("\n`%v`**:**`%v`**.**", i, guildTopics.Topics[topicname].Triggers)
+					str += fmt.Sprintf("\n-%v**:**`%v`**.**", i, guildTopics.Topics[topicname].Triggers)
 				}
 				session.ChannelMessageSend(message.ChannelID, str)
 			}
@@ -195,13 +193,13 @@ var japeFlavourText = []string{
 // If matchedTopic is called, it is already assumed the regex has been met.
 // Regex will not be checked.
 func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
-	rand.Seed(time.Now().Unix())
+	now := time.Now()
+	rand.Seed(now.Unix())
 	if time.Since(t.CurrentStreakSet) > t.HighScoreBroken.Sub(t.HighScoreSet) {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("%v > %v is %v", time.Since(t.CurrentStreakSet).Nanoseconds(), t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds(), time.Since(t.CurrentStreakSet).Nanoseconds() > t.HighScoreBroken.Sub(t.HighScoreSet).Nanoseconds()))
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
-			Color:       0x073642,
-			Title:       fmt.Sprintf("**Streak Broken. New Record!** %v", japeFlavourText[rand.Intn(len(japeFlavourText))]),
+			Color:       0x2AA198,
+			Title:       fmt.Sprintf("**New Record!** %v", japeFlavourText[rand.Intn(len(japeFlavourText))]),
 			Description: fmt.Sprintf("%v has broken the %v streak.", m.Author.Mention(), t.Name),
 			Thumbnail: &dsg.MessageEmbedThumbnail{
 				URL:    fmt.Sprintf("https://cdn.whitmans.io/streakreactions/newstreak.png"),
@@ -216,7 +214,7 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 						t.HighScoreSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						t.HighScoreBreaker,
 						t.HighScoreBroken.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						t.HighScoreBroken.Sub(t.HighScoreSet),
+						t.HighScoreBroken.Sub(t.HighScoreSet).Truncate(time.Second),
 						t.Message),
 					Inline: true,
 				},
@@ -226,8 +224,8 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 						t.LastStreakSetter,
 						t.LastStreakSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						m.Author.Mention(),
-						time.Now().Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						time.Since(t.LastStreakSet),
+						now.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						time.Since(t.LastStreakSet).Truncate(time.Second),
 						m.Content),
 					Inline: true,
 				},
@@ -237,13 +235,15 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 		t.HighScoreSet = t.LastStreakSet
 		t.LastStreakSetter = m.Author.ID
 		t.HighScoreBreaker = m.Author.ID
-		t.LastStreakSet = time.Now()
-		t.HighScoreBroken = time.Now()
+		t.LastStreakSet = now
+		t.HighScoreBroken = now
 		t.Message = m.Content
+		t.CurrentStreakSet = now
+		return t
 	} else {
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
 			Author:      &dsg.MessageEmbedAuthor{},
-			Color:       0x073642,
+			Color:       0xDC322F,
 			Title:       fmt.Sprintf("**Streak Broken.** %v", japeFlavourText[rand.Intn(len(japeFlavourText))]),
 			Description: fmt.Sprintf("%v has broken the %v streak.", m.Author.Mention(), t.Name),
 			Thumbnail: &dsg.MessageEmbedThumbnail{
@@ -259,7 +259,7 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 						t.HighScoreSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						t.HighScoreBreaker,
 						t.HighScoreBroken.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						t.HighScoreBroken.Sub(t.HighScoreSet),
+						t.HighScoreBroken.Sub(t.HighScoreSet).Truncate(time.Second),
 						t.Message),
 					Inline: true,
 				},
@@ -269,15 +269,16 @@ func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 						t.LastStreakSetter,
 						t.LastStreakSet.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
 						m.Author.Mention(),
-						time.Now().Format("Mon, Jan 2 2006 at 15:04 (MST)"),
-						time.Since(t.LastStreakSet),
+						now.Format("Mon, Jan 2 2006 at 15:04 (MST)"),
+						time.Since(t.LastStreakSet).Truncate(time.Second),
 						m.Content),
 					Inline: true,
 				},
 			},
 		})
 		t.LastStreakSetter = m.Author.ID
-		t.LastStreakSet = time.Now()
+		t.LastStreakSet = now
+		t.CurrentStreakSet = now
+		return t
 	}
-	return t
 }
