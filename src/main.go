@@ -34,6 +34,11 @@ var config struct {
 
 var Commands = make(map[string]*f.Command)
 
+var triggerReply = make(map[string]struct {
+	LastTrigger  time.Time
+	MessageCount int
+})
+
 func init() {
 	Commands["bpconfig"] = &f.Command{
 		Name: "The Bad Post Configuration Tool",
@@ -45,7 +50,7 @@ If you're a regex elder god, it uses https://github.com/google/re2/wiki/Syntax (
 # Arguments
 **--new <topic name>** : Create a new topic with the topic name <topic name>
 **--del <topic name>** : Delete <topic name>. Dangerous!
-**-ls** : List all topics
+**-listtopics** : List all topics
 **<topic name> <--add|-a> <regex>** : Add a trigger to <topic name> fulfilling <regex> (one regex per --add is supported). Case insensitive.
 **<topic name> <--rm|-rm> <item number>** : Remove the <item number> trigger from <topic name>
 **<topic name> <-ls>** : List all topic triggers
@@ -82,6 +87,13 @@ func incidentHandler(s *dsg.Session, m *dsg.MessageCreate) {
 		return
 	} else {
 		guildID = channel.GuildID
+	}
+	if tmp, ok := triggerReply[m.Message.ChannelID]; ok {
+		tmp.MessageCount++
+		triggerReply[m.Message.ChannelID] = tmp
+	} else if !ok {
+		tmp.MessageCount = 0
+		triggerReply[m.Message.ChannelID] = tmp
 	}
 	// Local topics reduces verbosity by grabbing the config.Guild[guildID] value.
 	guildTopics := config.Guild[guildID]
@@ -144,6 +156,13 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 		} else if flgs[i].Name == "--del" {
 			delete(guildTopics.Topics, flgs[i].Value)
 			session.ChannelMessageSend(message.ChannelID, fmt.Sprintf("Deleted topic %v.", flgs[i].Value))
+		} else if flgs[i].Name == "--listtopics" {
+			var str = "**Topics for this server:**"
+			for i := range guildTopics.Topics {
+				str += "-" + guildTopics.Topics[i].Name
+			}
+			str += "Use `" + f.Config.Prefix + "bpconfig <topic> -ls` to list assosiated triggers or `" + f.Config.Prefix + "help bpconfig` for more info."
+			session.ChannelMessageSend(message.ChannelID, str)
 		}
 		if topicname != "" {
 			switch flgs[i].Name {
@@ -188,12 +207,42 @@ var japeFlavourText = []string{
 	"You made a stupid post so now you get no rights.",
 	"Do you value your toes?",
 	"Arrested for stupid on main.",
+	"You'll recieve your L in 5-8 buisness days.",
 }
 
 // If matchedTopic is called, it is already assumed the regex has been met.
 // Regex will not be checked.
 func matchedTopic(t topic, s *dsg.Session, m *dsg.Message) topic {
 	now := time.Now()
+	if triggerReply[m.ChannelID].MessageCount < 120 && now.Sub(triggerReply[m.ChannelID].LastTrigger) < 5*time.Minute {
+		if time.Since(t.CurrentStreakSet) > t.HighScoreBroken.Sub(t.HighScoreSet) {
+			t.HighScoreSetter = t.LastStreakSetter
+			t.HighScoreSet = t.LastStreakSet
+			t.LastStreakSetter = m.Author.ID
+			t.HighScoreBreaker = m.Author.ID
+			t.LastStreakSet = now
+			t.HighScoreBroken = now
+			t.Message = m.Content
+			t.CurrentStreakSet = now
+			if tmp, _ := triggerReply[m.ChannelID]; true {
+				tmp.MessageCount = 0
+				tmp.LastTrigger = now
+				triggerReply[m.ChannelID] = tmp
+			}
+			return t
+		} else {
+			t.LastStreakSetter = m.Author.ID
+			t.LastStreakSet = now
+			t.CurrentStreakSet = now
+			if tmp, _ := triggerReply[m.ChannelID]; true {
+				tmp.MessageCount = 0
+				tmp.LastTrigger = now
+				triggerReply[m.ChannelID] = tmp
+			}
+			return t
+		}
+	}
+
 	rand.Seed(now.Unix())
 	if time.Since(t.CurrentStreakSet) > t.HighScoreBroken.Sub(t.HighScoreSet) {
 		s.ChannelMessageSendEmbed(m.ChannelID, &dsg.MessageEmbed{
