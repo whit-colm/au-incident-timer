@@ -159,9 +159,9 @@ func bpconfig(session *dsg.Session, message *dsg.Message) {
 		} else if flgs[i].Name == "--listtopics" {
 			var str = "**Topics for this server:**"
 			for i := range guildTopics.Topics {
-				str += "-" + guildTopics.Topics[i].Name
+				str += "\n- **" + guildTopics.Topics[i].Name + "**"
 			}
-			str += "Use `" + f.Config.Prefix + "bpconfig <topic> -ls` to list assosiated triggers or `" + f.Config.Prefix + "help bpconfig` for more info."
+			str += "\nUse `" + f.Config.Prefix + "bpconfig <topic> -ls` to list assosiated triggers or `" + f.Config.Prefix + "help bpconfig` for more info."
 			session.ChannelMessageSend(message.ChannelID, str)
 		}
 		if topicname != "" {
